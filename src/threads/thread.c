@@ -95,15 +95,14 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-//shifting it to init_thread function  
-  //sema initializing
- //sema_init(&(initial_thread->sema),0);
+
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -149,23 +148,26 @@ thread_tick (void)
 //this function will put the thread in sleep
 
 void thread_sleep(int64_t sleep_ticks){
-//have to declare sleep_ticks
+//have to declare sleep_ticks in thread.h
 
 //declare the thread
 	struct thread *t =thread_current();
+	
+	t->sleep_ticks = sleep_ticks;
+	
 	//interruption off
 	enum intr_level old_level =intr_disable();
 	//add in the sleeping list
 	list_push_back(&sleeping_list, &t->sleepelem);
 	//turn on the interruption on
+	intr_set_level(old_level);
 	
 	sema_down(&t->sema);
-	intr_set_level(old_level);
 
 }
 
 
-//this function is to wake up the thread
+/* This function will loop through the sleeping list and will check which thread has passed their sleep_ticks so that we can wake up that thread from sleeping list */
 
 void thread_awake(){
 
@@ -185,10 +187,6 @@ void thread_awake(){
 		}
 	}
 }
-
-
-
-
 
 
 
@@ -523,7 +521,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
   
-  //sema initializing
+  //NM: sema initializing
   sema_init(&(t->sema),0);
 }
 

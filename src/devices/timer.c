@@ -93,13 +93,10 @@ timer_sleep (int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON);
   //NM adding my code here
-  intr_disable ();
+ 
   //calling the sleep function here which is in thread.c file
   thread_sleep(start+ticks);
-  intr_set_level (INTR_ON);
-  //--------------
-  //while (timer_elapsed (start) < ticks) 
-    //thread_yield ();
+  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -178,7 +175,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
-  //call the thread_awake
+  //nm: call the thread_awake
   thread_awake();
 }
 
