@@ -177,6 +177,8 @@ thread_tick (void)
 /* Called when its time to put all threads back to max priority*/
 void reset_mlfq(void)
 {
+
+
   // TODO: loop over all_list and set priorities to 19,
   //       then clear all priority queues and then
   //       put all threads that are READY/BLOCKED
@@ -313,6 +315,20 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
+  // thread_block is another place where a thread goes from
+  // running to not running, so we should update
+  // time_spent_at_current_priority there too
+  struct thread *cur = thread_current ();
+  if (thread_mlfqs)
+  {
+    cur->time_at_current_priority+=thread_ticks;
+    if (cur->time_at_current_priority>=TIME_SLICE)
+    {
+      cur->priority--;
+      cur->time_at_current_priority=0;
+    }
+  }
+
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -427,13 +443,15 @@ thread_yield (void)
   // so this is a good opportunity to update time spent
   // at the current priority and check if it expended its
   // quantum
-  cur->time_at_current_priority+=thread_ticks;
-  if (cur->time_at_current_priority>=TIME_SLICE)
+  if (thread_mlfqs)
   {
-    cur->priority--;
-    cur->time_at_current_priority=0;
+    cur->time_at_current_priority+=thread_ticks;
+    if (cur->time_at_current_priority>=TIME_SLICE)
+    {
+      cur->priority--;
+      cur->time_at_current_priority=0;
+    }
   }
-  
   if (cur != idle_thread) 
   {
       if (thread_mlfqs)
@@ -637,6 +655,7 @@ alloc_frame (struct thread *t, size_t size)
   t->stack -= size;
   return t->stack;
 }
+
 
 /* 
    TG: With MLFQS loop over priority queue to find highest
