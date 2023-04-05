@@ -135,7 +135,6 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
-
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -173,16 +172,38 @@ thread_tick (void)
   
 }
 
-// TG: Added placeholder for this function
+// TG: Written first draft
 /* Called when its time to put all threads back to max priority*/
 void reset_mlfq(void)
 {
-
-
-  // TODO: loop over all_list and set priorities to 19,
-  //       then clear all priority queues and then
-  //       put all threads that are READY/BLOCKED
-  //       in the priority_queue[19]
+  
+  struct list_elem *e=list_begin(&all_list);
+  // empty out all lists in priority queue
+  for (int i=0;i<20;i++)
+  {
+    list_init(&priority_queue[i]);
+  }
+  
+  //loop over every thread
+  while (e!=list_tail(&all_list))
+  {
+    struct thread *t=list_entry(e, struct thread, allelem);
+    // don't need to reset priority of idle thread or dying threads
+    if (t!=idle_thread &&(t->status!=THREAD_DYING))
+    {
+      // all threads get their priority and
+      // time_spent_at_current_priority reset
+      t->priority=19;
+      t->time_at_current_priority=0;
+      // ready threads get added back to the queue
+      if (t->status=THREAD_READY)
+      {
+        list_push_back(&priority_queue[19], &t->elem);
+      }
+    }
+    e=list_next(e);
+  }
+  time_until_mlfq_reset=S;
 }
 
 
@@ -303,7 +324,12 @@ thread_create (const char *name, int priority,
   return tid;
 }
 
-/* Puts the current thread to sleep.  It will not be scheduled
+/* 
+  TG: Update time_at_current_priority and 
+  lower priority if needed, since this is a place where
+  a thread goes from running to not running
+
+  Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
    This function must be called with interrupts turned off.  It
@@ -546,7 +572,10 @@ thread_get_recent_cpu (void)
   return 0;
 }
 
-/* Idle thread.  Executes when no other thread is ready to run.
+/* 
+  TG: Idle thread sets priority to 0
+
+  Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
    thread_start().  It will be scheduled once initially, at which
@@ -560,6 +589,8 @@ idle (void *idle_started_ UNUSED)
 {
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
+
+  thread_set_priority(0);
   sema_up (idle_started);
 
   for (;;) 
@@ -753,9 +784,12 @@ static void
 schedule (void) 
 {
   struct thread *cur = running_thread ();
-  // TODO: check value of time_until_mlfq_reset
-  //       and call if S<=0
-
+  // check value of time_until_mlfq_reset
+  // and call if <=0
+  if (time_until_mlfq_reset<=0)
+  {
+    reset_mlfq();
+  }
 
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
