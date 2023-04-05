@@ -324,7 +324,10 @@ thread_block (void)
     cur->time_at_current_priority+=thread_ticks;
     if (cur->time_at_current_priority>=TIME_SLICE)
     {
-      cur->priority--;
+      if (cur->priority>0)
+      {
+        cur->priority--;
+      }
       cur->time_at_current_priority=0;
     }
   }
@@ -448,7 +451,10 @@ thread_yield (void)
     cur->time_at_current_priority+=thread_ticks;
     if (cur->time_at_current_priority>=TIME_SLICE)
     {
-      cur->priority--;
+      if (cur->priority>0)
+      {
+        cur->priority--;
+      }
       cur->time_at_current_priority=0;
     }
   }
