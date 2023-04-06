@@ -54,7 +54,7 @@ static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_SLICE 1            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -63,6 +63,10 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
+
+/*NM: ready list of MLFQS */
+static struct list mlfqs_ready_list[PRI_MAX-PRI_MIN+1];
+
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
@@ -96,6 +100,13 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleeping_list);
+	/* NM:
+	MLFQS initialization*/
+	if(thread_mlfqs){
+		for(int i=PRI_MIN; i<= PRI_MAX;i++){
+			list_init(&mlfqs_ready_list[i]);
+		}
+	}
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -253,6 +264,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+	/* NM*/
+	if(get_priority(thread_current())<get_priority(t)){
+		thread_yield();
+	}
 
   return tid;
 }
@@ -290,7 +305,15 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+	/* NM*
+	MLFQS put to ready list*/
+   if(thread_mlfqs){
+	   mlfqs_enque(t);
+   }else{
+	   list_insert_ordered(&ready_list,&t->elem,higher_priority_comparator,NULL);
+   }
+  /*NM*/
+  //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -360,8 +383,16 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread){ 
+	  /* NM*/
+	if(thread_mlfqs){
+		mlfqs_enque(cur);
+	}else{
+		list_insert_ordered(7ready_list,&cur->elem,higher_priority_comparator,NULL);
+	}
+   // list_push_back (&ready_list, &cur->elem);
+	  /*nm*/
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
