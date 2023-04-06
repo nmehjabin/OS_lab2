@@ -99,8 +99,8 @@ test_cpubound (void *info_)
       int64_t cur_time = timer_ticks ();
       if (cur_time != last_time) {
         ti->tick_count++;
-	ti->qtimes[thread_get_priority()] += 1;
-	last_time = cur_time;
+	      ti->qtimes[thread_get_priority()] += 1;
+	      last_time = cur_time;
       }
     }
 }

@@ -68,16 +68,16 @@ test_mlfqs2_shortlong (void)
       d->iterations = 0;
       d->lock = &lock; // all share one lock
       if (i == 0) {
-	d->runticks = RUN_TICKS;
-	d->priority = PRI_MAX;
+	      d->runticks = RUN_TICKS;
+	      d->priority = PRI_MAX;
       } else {
-	d->runticks = 10;
-	d->priority = 10;
+	      d->runticks = 10;
+	      d->priority = 10;
       }
 
       for (j = PRI_MAX; j >= PRI_MIN; j--) {
-	info[i].qtimes[j] = 0;
-	info[i].qiters[j] = 0; 
+	      info[i].qtimes[j] = 0;
+	      info[i].qiters[j] = 0; 
       }
       thread_create (name, PRI_MAX-i, test_short, d);
     }
@@ -126,14 +126,14 @@ test_short(void *info_)
     // Run for runTicks
     while (ticksRun < runTicks)
       {
-	int64_t cur_time = timer_ticks();
+        int64_t cur_time = timer_ticks();
 
-	if (cur_time != last_time) { // record another tick
-	  ti->tick_count++;
-	  ticksRun++;
-	  ti->qtimes[thread_get_priority()] += 1; //ticks in this queue
-	  last_time = cur_time;
-	}
+        if (cur_time != last_time) { // record another tick
+          ti->tick_count++;
+          ticksRun++;
+          ti->qtimes[thread_get_priority()] += 1; //ticks in this queue
+          last_time = cur_time;
+        }
       }
     ti->qiters[thread_get_priority()] += 1; // one run completed
     

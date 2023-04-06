@@ -23,7 +23,7 @@ typedef int tid_t;
 
 // TG: Added these two new constants
 #define NUM_MLFQS 19                    /*Number of different priority levels*/
-#define S 1000                          /*Number of ticks before all threads are returned to top priority*/
+#define S 400                          /*Number of ticks before all threads are returned to top priority*/
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 19                  /* Default priority. */

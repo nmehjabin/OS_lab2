@@ -61,7 +61,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 static int time_until_mlfq_reset;/*# of timer ticks until we reset all threads to max priority*/
 
 /* Scheduling. */
-#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_SLICE 1            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 
@@ -196,7 +196,7 @@ void reset_mlfq(void)
       t->priority=19;
       t->time_at_current_priority=0;
       // ready threads get added back to the queue
-      if (t->status=THREAD_READY)
+      if (t->status==THREAD_READY)
       {
         list_push_back(&priority_queue[19], &t->elem);
       }
