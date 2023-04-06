@@ -166,16 +166,16 @@ thread_tick (void)
   thread_ticks++;
   if (thread_mlfqs)
   {
-    t->time_at_current_priority++;
+    t->time_left_at_current_priority--;
     time_until_mlfq_reset--;
     /* Enforce preemption. */
-    if (t->time_at_current_priority >= TIME_SLICE)
+    if (t->time_left_at_current_priority <= 0)
     {
       if (t->priority>0)
       {
         t->priority--;
       }
-      t->time_at_current_priority=0;
+      t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
       intr_yield_on_return ();
     }
   }
@@ -212,7 +212,7 @@ void reset_mlfq(void)
       // all threads get their priority and
       // time_spent_at_current_priority reset
       t->priority=19;
-      t->time_at_current_priority=0;
+      t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
       // ready threads get added back to the queue
       if (t->status==THREAD_READY)
       {
@@ -658,7 +658,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   if (thread_mlfqs)
   {
-    t->time_at_current_priority=0;
+    t->time_left_at_current_priority=0;
   }
   t->magic = THREAD_MAGIC;
 
