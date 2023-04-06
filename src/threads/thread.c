@@ -144,6 +144,7 @@ thread_start (void)
 
 /* 
   TG: Decrement time_until_mlfq_reset for each tick
+      and update priority based on that variable
 
   Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -162,13 +163,30 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  thread_ticks++;
   if (thread_mlfqs)
   {
+    t->time_at_current_priority++;
     time_until_mlfq_reset--;
+    /* Enforce preemption. */
+    if (t->time_at_current_priority >= TIME_SLICE)
+    {
+      if (t->priority>0)
+      {
+        t->priority--;
+      }
+      t->time_at_current_priority=0;
+      intr_yield_on_return ();
+    }
   }
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+  else
+  {
+    /* Enforce preemption. */
+    if (thread_ticks >= TIME_SLICE)
+      intr_yield_on_return ();
+  }
+  
+  
   
 }
 
@@ -254,7 +272,6 @@ void thread_awake(){
 
 
 
-//
 
 /* Prints thread statistics. */
 void
@@ -325,9 +342,7 @@ thread_create (const char *name, int priority,
 }
 
 /* 
-  TG: Update time_at_current_priority and 
-  lower priority if needed, since this is a place where
-  a thread goes from running to not running
+  TG: thread_block is now unchanged
 
   Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -340,24 +355,9 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-
-  // thread_block is another place where a thread goes from
-  // running to not running, so we should update
-  // time_spent_at_current_priority there too
+// TG: Moved updating priority/time_spent_at_current_priority to
+  // thread_tick () function
   struct thread *cur = thread_current ();
-  if (thread_mlfqs)
-  {
-    cur->time_at_current_priority+=thread_ticks;
-    if (cur->time_at_current_priority>=TIME_SLICE)
-    {
-      if (cur->priority>0)
-      {
-        cur->priority--;
-      }
-      cur->time_at_current_priority=0;
-    }
-  }
-
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -366,6 +366,7 @@ thread_block (void)
    TG: With MLFQS, adds thread to the corresponding list in the 
    priority queue, use same elem since we don't use the ready_list
    with MLFQS
+   TG: yield current thread if unblocked thread is of higher priority
     
    Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
@@ -384,17 +385,21 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  
+  t->status = THREAD_READY;
   if (thread_mlfqs)
   {
       int p=t->priority;
       list_push_back(&priority_queue[p], &t->elem);
+      if (thread_current()->priority<p)
+      {
+        thread_yield();
+      }
   }
   else
   {
       list_push_back (&ready_list, &t->elem);
   }
-  t->status = THREAD_READY;
+  
   intr_set_level (old_level);
 }
 
@@ -453,7 +458,8 @@ thread_exit (void)
 }
 
 /* 
-   TG: Added prototype for updating priority based on time spent
+   TG: With mlfqs, thread is pushed onto the priority queue instead
+       of the ready list
 
 Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
@@ -466,24 +472,8 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  // because we yielded, we went from running to ready,
-  // and when schedule is called at the end,
-  // thread_ticks will be reset
-  // so this is a good opportunity to update time spent
-  // at the current priority and check if it expended its
-  // quantum
-  if (thread_mlfqs)
-  {
-    cur->time_at_current_priority+=thread_ticks;
-    if (cur->time_at_current_priority>=TIME_SLICE)
-    {
-      if (cur->priority>0)
-      {
-        cur->priority--;
-      }
-      cur->time_at_current_priority=0;
-    }
-  }
+  // TG: Moved updating priority/time_spent_at_current_priority to
+  // thread_tick () function
   if (cur != idle_thread) 
   {
       if (thread_mlfqs)
