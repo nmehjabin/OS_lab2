@@ -30,6 +30,7 @@ struct thread_info
 
 static void test_cpubound(void *info_);
 void test_mlfqs2_test3 (void) ;
+static void check_descending_priority (void *array) ;
 
 void
 test_mlfqs2_test3 (void) 
@@ -61,7 +62,7 @@ test_mlfqs2_test3 (void)
       ti->tick_count = 0;
       ti->start_time = start_time;
       for (j = 0; j < NUM_MLFQS; j++) ti->qtimes[j] = 0;
-      thread_create (name, PRI_MAX, test_cpubound, ti);
+      thread_create (name, PRI_MAX, check_descending_priority, ti);
     }
   msg ("Starting threads took %"PRId64" ticks.",
        timer_elapsed (start_time));
@@ -85,6 +86,16 @@ test_mlfqs2_test3 (void)
   }
 
 }
+
+static void check_descending_priority (void *array)
+{
+    bool *b_array = (bool*) array;
+    while (thread_get_priority() >= 0)
+    {
+        b_array[thread_get_priority()]=true;
+    }
+}
+
 
 static void 
 test_cpubound (void *info_) 

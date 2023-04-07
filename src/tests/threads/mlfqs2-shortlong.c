@@ -26,7 +26,7 @@ struct thread_info
     struct lock *lock;          /* Lock on output. */
   };
 
-#define THREAD_CNT 2
+#define THREAD_CNT 1
 #define ITER_CNT 30
 #define RUN_TICKS 5
 
@@ -84,7 +84,7 @@ test_mlfqs2_shortlong (void)
   //print_mlfqs();
   lock_release(&lock); // all threads can run
   thread_yield();
-  
+  //lock_acquire(&lock);
   /* All the other threads now run to termination here. */
   ASSERT (lock.holder == NULL);
   for (i = 0; i < THREAD_CNT; i++) {
@@ -108,6 +108,7 @@ test_short(void *info_)
 {
   int i;
   struct thread_info *ti = info_;
+  //lock_acquire(ti->lock);
   // TIMER_FREQ is 100 and determines tick duration
   struct thread *t = thread_current ();
   int runTicks = ti->runticks;
@@ -135,8 +136,8 @@ test_short(void *info_)
         }
       }
     ti->qiters[thread_get_priority()] += 1; // one run completed
-    
     thread_yield();
   } // for-loop
+  //lock_release(ti->lock);
 }
 

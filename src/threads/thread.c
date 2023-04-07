@@ -168,20 +168,22 @@ thread_tick (void)
   {
     time_until_mlfq_reset--;
     /* Enforce preemption. */
+    t->time_left_at_current_priority--;
     if (t->time_left_at_current_priority <= 0)
     {
       if (t->priority>PRI_MIN)
       {
         t->priority--;
       }
-      t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
+      t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX - t->priority)+1);
       intr_yield_on_return ();
     }
+    /*
     else
     {
        t->time_left_at_current_priority--;
     }
-   
+   */
   }
   else
   {
@@ -534,6 +536,13 @@ thread_set_priority (int new_priority)
   if((p>=PRI_MIN)&&(p<=PRI_MAX))
   {
       thread_current ()->priority = new_priority;
+      for(int i=19;i>new_priority;i--)
+    	{
+    	    if (!list_empty(&priority_queue[i]) && intr_context())
+    	    {
+    	       thread_yield();
+    	    }
+    	}
   }
 }
 
@@ -671,7 +680,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   if (thread_mlfqs)
   {
-    t->time_left_at_current_priority=0;
+    t->time_left_at_current_priority=TIME_SLICE;
   }
   t->magic = THREAD_MAGIC;
 
