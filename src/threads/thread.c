@@ -31,7 +31,7 @@ static struct list all_list;
 /*
    Each array entry is a list of threads of the corresponding priority.
 */
-static struct list priority_queue[20];
+static struct list priority_queue[PRI_MAX-PRI_MIN+1];
 
 /* List of sleeping threads  */
 static struct list sleeping_list;
@@ -166,18 +166,22 @@ thread_tick (void)
   thread_ticks++;
   if (thread_mlfqs)
   {
-    t->time_left_at_current_priority--;
     time_until_mlfq_reset--;
     /* Enforce preemption. */
     if (t->time_left_at_current_priority <= 0)
     {
-      if (t->priority>0)
+      if (t->priority>PRI_MIN)
       {
         t->priority--;
       }
       t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
       intr_yield_on_return ();
     }
+    else
+    {
+       t->time_left_at_current_priority--;
+    }
+   
   }
   else
   {
@@ -211,7 +215,7 @@ void reset_mlfq(void)
     {
       // all threads get their priority and
       // time_spent_at_current_priority reset
-      t->priority=19;
+      t->priority=PRI_MAX;
       t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
       // ready threads get added back to the queue
       if (t->status==THREAD_READY)
@@ -390,10 +394,19 @@ thread_unblock (struct thread *t)
   {
       int p=t->priority;
       list_push_back(&priority_queue[p], &t->elem);
-      if (thread_current()->priority<p)
+      
+      struct thread *th = thread_current();
+      
+      if (th!=idle_thread &&  th->priority<p)
       {
-        thread_yield();
+        intr_set_level (old_level);
+        if (intr_context ())
+        {
+          thread_yield();
+        }
+        
       }
+    
   }
   else
   {

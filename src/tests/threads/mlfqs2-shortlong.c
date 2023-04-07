@@ -97,7 +97,6 @@ test_mlfqs2_shortlong (void)
     msg ("ByQ thread %d received %d ticks.", i, sum);
   }
 
-
 }
 
 /*
