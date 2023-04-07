@@ -35,6 +35,7 @@ extern test_func test_mlfqs_block;
 extern test_func test_mlfqs2_fifo;
 extern test_func test_mlfqs2_longproc;
 extern test_func test_mlfqs2_shortlong;
+extern test_func test_mlfqs2_test3;
 
 void msg (const char *, ...);
 void fail (const char *, ...);
