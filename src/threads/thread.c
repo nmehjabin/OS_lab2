@@ -57,7 +57,6 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
-//TG: Added this to represent S value
 static int time_until_mlfq_reset;/*# of timer ticks until we reset all threads to max priority*/
 
 /* Scheduling. */
@@ -111,7 +110,7 @@ thread_init (void)
   // initialize all lists for the priority queue
   if (thread_mlfqs)
   {
-      for (int i=0;i<20;i++)
+      for (int i=0;i<=PRI_MAX;i++)
       {
         list_init(&priority_queue[i]);
       }
@@ -175,15 +174,10 @@ thread_tick (void)
       {
         t->priority--;
       }
+      // thread's quantum increases with lower priority
       t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX - t->priority)+1);
       intr_yield_on_return ();
     }
-    /*
-    else
-    {
-       t->time_left_at_current_priority--;
-    }
-   */
   }
   else
   {
@@ -196,14 +190,14 @@ thread_tick (void)
   
 }
 
-// TG: Written first draft
+
 /* Called when its time to put all threads back to max priority*/
 void reset_mlfq(void)
 {
   
   struct list_elem *e=list_begin(&all_list);
   // empty out all lists in priority queue
-  for (int i=0;i<20;i++)
+  for (int i=0;i<=PRI_MAX;i++)
   {
     list_init(&priority_queue[i]);
   }
@@ -215,14 +209,14 @@ void reset_mlfq(void)
     // don't need to reset priority of idle thread or dying threads
     if (t!=idle_thread &&(t->status!=THREAD_DYING))
     {
-      // all threads get their priority and
-      // time_spent_at_current_priority reset
+      // reset priority and time_spent_at_current_priority 
+      // for all threads
       t->priority=PRI_MAX;
       t->time_left_at_current_priority=TIME_SLICE*((PRI_MAX-t->priority)+1);
       // ready threads get added back to the queue
       if (t->status==THREAD_READY)
       {
-        list_push_back(&priority_queue[19], &t->elem);
+        list_push_back(&priority_queue[PRI_MAX], &t->elem);
       }
     }
     e=list_next(e);
@@ -323,7 +317,15 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, PRI_MAX);
+  if (thread_mlfqs)
+  {
+    init_thread (t, name, PRI_MAX);
+  }
+  else
+  {
+    init_thread (t, name, priority);
+  }
+  
   tid = t->tid = allocate_tid ();
 
   /* Stack frame for kernel_thread(). */
@@ -348,8 +350,6 @@ thread_create (const char *name, int priority,
 }
 
 /* 
-  TG: thread_block is now unchanged
-
   Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
 
@@ -361,8 +361,6 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-// TG: Moved updating priority/time_spent_at_current_priority to
-  // thread_tick () function
   struct thread *cur = thread_current ();
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
@@ -399,9 +397,11 @@ thread_unblock (struct thread *t)
       
       struct thread *th = thread_current();
       
+      // maintain priority running
       if (th!=idle_thread &&  th->priority<p)
       {
         intr_set_level (old_level);
+        // this test is to avoid crashes
         if (intr_context ())
         {
           thread_yield();
@@ -487,13 +487,12 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  // TG: Moved updating priority/time_spent_at_current_priority to
-  // thread_tick () function
   if (cur != idle_thread) 
   {
       if (thread_mlfqs)
       {
           int p=cur->priority;
+          // thread put into the list that matches its priority
           list_push_back(&priority_queue[p], &cur->elem);
       }
       else
@@ -532,17 +531,22 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  int p = thread_current ()->priority;
-  if((p>=PRI_MIN)&&(p<=PRI_MAX))
+  if((new_priority>=PRI_MIN)&&(new_priority<=PRI_MAX))
   {
       thread_current ()->priority = new_priority;
-      for(int i=19;i>new_priority;i--)
-    	{
-    	    if (!list_empty(&priority_queue[i]) && intr_context())
-    	    {
-    	       thread_yield();
-    	    }
-    	}
+      // maintain priority running
+      // check if there are any threads with higher priority
+      // than the new priority
+      if (intr_context())
+      {
+        for(int i=PRI_MAX;i>new_priority;i--)
+        {
+          if (!list_empty(&priority_queue[i]) && intr_context())
+          {
+              thread_yield();
+          }
+        }
+      }
   }
 }
 
@@ -602,7 +606,8 @@ idle (void *idle_started_ UNUSED)
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
 
-  thread_set_priority(0);
+  // idle thread should have minimum priority
+  thread_set_priority(PRI_MIN);
   sema_up (idle_started);
 
   for (;;) 
@@ -680,6 +685,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   if (thread_mlfqs)
   {
+    // threads start at minimum time slice
     t->time_left_at_current_priority=TIME_SLICE;
   }
   t->magic = THREAD_MAGIC;
@@ -721,7 +727,7 @@ next_thread_to_run (void)
     if (thread_mlfqs)
     {
     	// loop over priority_queue array to find non-empty list with highest priority
-      for(int i=19;i>=0;i--)
+      for(int i=PRI_MAX;i>=PRI_MIN;i--)
     	{
     	    if (!list_empty(&priority_queue[i]))
     	    {
@@ -797,7 +803,7 @@ schedule (void)
 {
   struct thread *cur = running_thread ();
   // check value of time_until_mlfq_reset
-  // and call if <=0
+  // and call mlfq_reset if <=0
   if (time_until_mlfq_reset<=0)
   {
     reset_mlfq();

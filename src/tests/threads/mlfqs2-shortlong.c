@@ -26,7 +26,7 @@ struct thread_info
     struct lock *lock;          /* Lock on output. */
   };
 
-#define THREAD_CNT 1
+#define THREAD_CNT 2
 #define ITER_CNT 30
 #define RUN_TICKS 5
 
@@ -72,7 +72,7 @@ test_mlfqs2_shortlong (void)
 	      d->priority = PRI_MAX;
       } else {
 	      d->runticks = 10;
-	      d->priority = 10;
+	      d->priority = PRI_MAX;
       }
 
       for (j = PRI_MAX; j >= PRI_MIN; j--) {

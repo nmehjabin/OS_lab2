@@ -1,85 +1,110 @@
-/* Creates one cpu-bound thread that runs ~3 seconds.
-   @author S. Anderson
+/* 
+   Creates threads that run 1/5 of quantum and whole quantum.  Test
+   ability to alternate procs, but stay at one level until quantum
+   expires.
 */
 
+#include "tests/threads/mlfqs2-test3.h"
 #include <stdio.h>
-#include <inttypes.h>
 #include "tests/threads/tests.h"
 #include "threads/init.h"
+#include "devices/timer.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "devices/timer.h"
 
-#define PRIMES_LIMIT 100000 // upper bound for primes search. Tune this
-                           // to force each thread to use a
-                           // significant fraction of its quantum.
+extern unsigned thread_ticks;
 
 struct thread_info 
   {
     int64_t start_time;
-    int id;                     /* Sleeper ID. */
+    int id;
+    int priority;
     int iterations;             /* Iterations so far. */
-    struct lock *lock;          /* Lock on output. */
     int tick_count;
-    int qtimes[NUM_MLFQS];
+    int runticks;               /* max ticks in one time at CPU */
+    int qtimes[NUM_MLFQS];      /* time in each queue */
+    int qiters[NUM_MLFQS];      /* iters in each queue */
+    struct list times[PRI_MAX-PRI_MIN+1];
+    //int **op;                   /* Output buffer position. */
+    struct lock *lock;          /* Lock on output. */
   };
 
-#define THREAD_CNT 3
-#define ITER_CNT 1
+#define THREAD_CNT 2
+#define ITER_CNT 30
+#define RUN_TICKS 5
 
-static void test_cpubound(void *info_);
-void test_mlfqs2_test3 (void) ;
-static void check_descending_priority (void *array) ;
+static thread_func test_short;
+static void test_short2 (void *);
 
 void
 test_mlfqs2_test3 (void) 
 {
   struct thread_info info[THREAD_CNT];
   struct lock lock;
+  //int *output, *op;
   int i, j, cnt;
-  int64_t start_time;
 
+  /* This test is for MLFQS. */
   ASSERT (thread_mlfqs);
-  start_time = timer_ticks ();
-  
-  msg ("Starting %d cpu-bound thread runs to completion.",THREAD_CNT);
-  msg ("Should move down one queue each time.");
 
-  lock_init (&lock);
-  lock_acquire(&lock); // main holds lock
+  /* Make sure our priority is the default. */
+  // ASSERT (thread_get_priority () == PRI_DEFAULT);
 
-  lock_release(&lock);
+  msg ("%d threads will iterate %d times running round robin.",
+       THREAD_CNT, ITER_CNT);
+  msg ("First thread runs %d ticks then blocks.  Others use entire quantum.",RUN_TICKS);
+
+  //output = op = malloc (sizeof *output * THREAD_CNT * ITER_CNT * 2);
+  //ASSERT (output != NULL);
   
+  printf("Main at priority %d\n",PRI_MIN);
+  thread_set_priority (PRI_MIN); // main at min priority
+
+    
   for (i = 0; i < THREAD_CNT; i++) 
     {
       char name[16];
-      struct thread_info *ti = &info[i];
-      snprintf (name, sizeof name, "lproc %d", i);
-      ti->id = i;
-      ti->iterations = 0;
-      ti->lock = &lock; // all share one lock
-      ti->tick_count = 0;
-      ti->start_time = start_time;
-      for (j = 0; j < NUM_MLFQS; j++) ti->qtimes[j] = 0;
-      thread_create (name, PRI_MAX, check_descending_priority, ti);
+      struct thread_info *d = info + i;
+      snprintf (name, sizeof name, "%d", i);
+      d->tick_count = 0;
+      d->id = i;
+      d->iterations = 0;
+      d->lock = &lock; // all share one lock
+      for (int i=0;i<20;i++)
+      {
+        list_init(&d->times[i]);
+      }
+      if (i == 0) {
+	      d->runticks = RUN_TICKS;
+      } else {
+	      d->runticks = 10;
+      }
+
+      for (j = PRI_MAX; j >= PRI_MIN; j--) {
+	      info[i].qtimes[j] = 0;
+	      info[i].qiters[j] = 0; 
+      }
+      if (i==0)
+      {
+        thread_create (name, PRI_MAX-i, test_short, d);
+      }
+      else
+      {
+        thread_create (name, PRI_MAX-i, test_short2, d);
+      }
+      
     }
-  msg ("Starting threads took %"PRId64" ticks.",
-       timer_elapsed (start_time));
-
-
-  thread_set_priority (PRI_MIN); // main at min priority
-
-  msg("Sleeping %d ticks to let other threads run.",30*TIMER_FREQ);
-  timer_sleep(30 * TIMER_FREQ);
-
+  //print_mlfqs();
+  thread_yield();
+  //lock_acquire(&lock);
   /* All the other threads now run to termination here. */
-  //ASSERT (lock.holder == NULL);
+  ASSERT (lock.holder == NULL);
   for (i = 0; i < THREAD_CNT; i++) {
     int sum = 0;
     msg ("Thread %d received %d ticks.", i, info[i].tick_count);
     for (j = PRI_MAX; j >= PRI_MIN; j--) {
-      msg("Q %3d %6d",j,info[i].qtimes[j]);
+      msg("Q %3d %6d %6d",j,info[i].qtimes[j],info[i].qiters[j]);
       sum += info[i].qtimes[j];
     }
     msg ("ByQ thread %d received %d ticks.", i, sum);
@@ -87,32 +112,111 @@ test_mlfqs2_test3 (void)
 
 }
 
-static void check_descending_priority (void *array)
+// this test is incomplete
+static void
+priority_ordering_test (void *info_)
 {
-    bool *b_array = (bool*) array;
-    while (thread_get_priority() >= 0)
+  struct thread_info *ti = info_;
+  thread_set_priority(ti->priority);
+  struct thread *t = thread_current ();
+  int runTicks = ti->runticks;
+  int64_t ticksRun = 0;
+  int64_t runtime = 0;
+  int64_t time_since_yield = 0;
+  r_t *rt = malloc(sizeof(r_t));
+  while (ticksRun < runTicks)
+  {
+    r_t *rt = malloc(sizeof(r_t));
+    int64_t runtime = timer_ticks();
+    rt->time=runtime;
+    list_push_back(&(ti->times),&(rt->telem));
+    while (thread_ticks>=runtime)
     {
-        b_array[thread_get_priority()]=true;
+      time_since_yield = timer_ticks() - runtime;
     }
+    ticksRun = ticksRun + time_since_yield;
+  }
+
 }
 
 
-static void 
-test_cpubound (void *info_) 
-{
-  struct thread_info *ti = info_;
-  int64_t sleep_time = 5 * TIMER_FREQ;
-  int64_t spin_time = sleep_time + 30 * TIMER_FREQ;
-  int64_t last_time = 0;
+/*
+  Run for runticks, then yield.
+*/
 
-  while (timer_elapsed (ti->start_time) < spin_time) 
-    {
-      int64_t cur_time = timer_ticks ();
-      if (cur_time != last_time) {
-        ti->tick_count++;
-	      ti->qtimes[thread_get_priority()] += 1;
-	      last_time = cur_time;
+static void 
+test_short2(void *info_) 
+{
+  int i;
+  struct thread_info *ti = info_;
+  //lock_acquire(ti->lock);
+  // TIMER_FREQ is 100 and determines tick duration
+  struct thread *t = thread_current ();
+  int runTicks = ti->runticks;
+  
+  int64_t sleep_time = TIMER_FREQ; // one second
+  int64_t last_time = 0;
+  int64_t start_time;
+  int64_t ticksRun = 0;
+  int64_t lastyield = 0;
+  
+  for (i = 0; i < ITER_CNT; i++) {
+    start_time = timer_ticks ();
+    last_time = start_time;
+    ticksRun = 0;
+    // Run for runTicks
+    while (ticksRun < runTicks)
+      {
+        
+        int64_t cur_time = timer_ticks();
+        
+        if (cur_time != last_time) { // record another tick
+          ti->tick_count++;
+          ticksRun++;
+          ti->qtimes[thread_get_priority()] += 1; //ticks in this queue
+          last_time = cur_time;
+        }
       }
-    }
+    ti->qiters[thread_get_priority()] += 1; // one run completed
+    thread_yield();
+  } // for-loop
+  //lock_release(ti->lock);
+}
+
+static void 
+test_short(void *info_) 
+{
+  int i;
+  struct thread_info *ti = info_;
+  //lock_acquire(ti->lock);
+  // TIMER_FREQ is 100 and determines tick duration
+  struct thread *t = thread_current ();
+  int runTicks = ti->runticks;
+  
+  int64_t sleep_time = TIMER_FREQ; // one second
+  int64_t last_time = 0;
+  int64_t start_time;
+  int64_t ticksRun = 0;
+  
+  for (i = 0; i < ITER_CNT; i++) {
+    start_time = timer_ticks ();
+    last_time = start_time;
+    ticksRun = 0;
+    // Run for runTicks
+    while (ticksRun < runTicks)
+      {
+        int64_t cur_time = timer_ticks();
+
+        if (cur_time != last_time) { // record another tick
+          ti->tick_count++;
+          ticksRun++;
+          ti->qtimes[thread_get_priority()] += 1; //ticks in this queue
+          last_time = cur_time;
+        }
+      }
+    ti->qiters[thread_get_priority()] += 1; // one run completed
+    thread_yield();
+  } // for-loop
+  //lock_release(ti->lock);
 }
 

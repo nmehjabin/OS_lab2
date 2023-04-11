@@ -22,7 +22,7 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 // TG: Added these two new constants
-#define NUM_MLFQS 19                    /*Number of different priority levels*/
+#define NUM_MLFQS 20                    /*Number of different priority levels*/
 #define S 10000                          /*Number of ticks before all threads are returned to top priority*/
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
